@@ -1,13 +1,17 @@
-                    
-
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QComboBox, QPushButton, QLabel, QTabWidget, QStatusBar,
-    QFileDialog, QMessageBox
+    QFileDialog, QMessageBox, QSplitter
 )
+
+from PySide6.QtCore import Qt
+from PySide6 import QtCore
+from PySide6.QtWidgets import QLineEdit
 
 from gui.widgets.log_panel import LogPanel
 from gui.tabs.tab_card import TabCard
+from gui.tabs.chip_info import TabChipInfo
+from gui.tabs.tab_protection import TabProtection
 
 from gui.themes import THEMES
 
@@ -15,16 +19,12 @@ from core.pcsc_manager import PCSCManager
 from controllers.app_controller import AppController
 from core.settings_manager import SettingsManager
 from core.language_manager import LanguageManager
-from gui.tabs.chip_info import TabChipInfo
-from PySide6 import QtCore 
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-                                                              
-              
-                                                              
         self.settings = SettingsManager()
         self.lang = LanguageManager(self.settings.get("language", "es"))
         self.pcsc = PCSCManager()
@@ -32,35 +32,60 @@ class MainWindow(QMainWindow):
         self.controller = AppController(
             self.pcsc,
             self.settings,
-            logger=self.log
+            logger=self.log,
         )
+        self.controller.main = self
 
-                                                              
-                       
-                                                              
         self.setWindowTitle("SLE Suite PRO")
         self.resize(1100, 750)
 
         theme = self.settings.get("theme", "dark")
+        self.current_theme = theme
         self.setStyleSheet(THEMES.get(theme, THEMES["dark"]))
 
-                    
-        self.build_menu()
+        self._build_menu_bar()
+        self._build_central_widgets()
+        self._build_status_bar()
 
-                                                              
-                     
-                                                              
+        self.refresh_readers()
+
+    def tr(self, key: str) -> str:
+        return self.lang.tr(key)
+
+    def _build_menu_bar(self):
+        menu = self.menuBar()
+
+        file_menu = menu.addMenu(self.tr("menu.file"))
+        file_menu.addAction(self.tr("menu.import_bin")).triggered.connect(self.action_import_bin)
+        file_menu.addAction(self.tr("menu.export_bin")).triggered.connect(self.action_export_bin)
+        file_menu.addSeparator()
+        file_menu.addAction(self.tr("menu.exit")).triggered.connect(self.close)
+
+        settings_menu = menu.addMenu(self.tr("menu.settings"))
+
+        theme_menu = settings_menu.addMenu(self.tr("menu.theme"))
+        theme_menu.addAction(self.tr("theme.light")).triggered.connect(lambda: self.update_theme("light"))
+        theme_menu.addAction(self.tr("theme.dark")).triggered.connect(lambda: self.update_theme("dark"))
+
+        lang_menu = settings_menu.addMenu(self.tr("menu.language"))
+        for lang_code in self.settings.available_langs:
+            lang_menu.addAction(lang_code).triggered.connect(
+                lambda checked, c=lang_code: self.update_language(c)
+            )
+
+        help_menu = menu.addMenu(self.tr("menu.help"))
+        help_menu.addAction(self.tr("menu.about")).triggered.connect(self.action_about)
+
+    def _build_central_widgets(self):
         root = QWidget()
-        layout = QVBoxLayout()
-        root.setLayout(layout)
+        root_layout = QVBoxLayout()
+        root.setLayout(root_layout)
         self.setCentralWidget(root)
 
-                                                              
-                 
-                                                              
         top = QHBoxLayout()
 
-        top.addWidget(QLabel(self.tr("label.reader")))
+        self.lbl_reader = QLabel(self.tr("label.reader"))
+        top.addWidget(self.lbl_reader)
 
         self.reader_combo = QComboBox()
         top.addWidget(self.reader_combo)
@@ -82,32 +107,47 @@ class MainWindow(QMainWindow):
         self.btn_read.clicked.connect(self.read_card)
         self.btn_read.setVisible(False)
         top.addWidget(self.btn_read)
+        
+        self.lbl_psc_state = QLabel(self.tr("label.psc_state_unknown"))
+        self.lbl_psc_state.setStyleSheet("color: orange; font-weight: bold; padding-left: 10px;")
+        top.addWidget(self.lbl_psc_state)
+        self.lbl_psc_state.setVisible(False)
 
         top.addStretch()
-        layout.addLayout(top)
+        root_layout.addLayout(top)
 
-                                                              
-              
-                                                              
+        splitter = QSplitter(Qt.Vertical)
+        self.splitter = splitter
+
+        top_container = QWidget()
+        top_layout = QVBoxLayout()
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_container.setLayout(top_layout)
+
         self.tabs = QTabWidget()
         self.tab_card = TabCard(self)
-                                       
         self.tab_chipinfo = TabChipInfo(self)
+        self.tab_protection = TabProtection(self)
 
         self.tabs.addTab(self.tab_card, self.tr("tab.card"))
-                                                                  
         self.tabs.addTab(self.tab_chipinfo, self.tr("tab.chipinfo"))
+        self.tabs.addTab(self.tab_protection, self.tr("tab.protection"))
 
-        layout.addWidget(self.tabs)
+        top_layout.addWidget(self.tabs)
 
-                                                              
-                      
-                                                              
-        self.log_panel = LogPanel()
-        layout.addWidget(self.log_panel)
+        is_dark = (self.current_theme == "dark")
+        self.log_panel = LogPanel(is_dark=is_dark)
 
-       
+        splitter.addWidget(top_container)
+        splitter.addWidget(self.log_panel)
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 1)
 
+        root_layout.addWidget(splitter)
+        self.update_psc_state()
+
+
+    def _build_status_bar(self):
         status = QStatusBar()
         self.setStatusBar(status)
 
@@ -115,57 +155,13 @@ class MainWindow(QMainWindow):
         self.lbl_status.setStyleSheet("color: red; font-weight: bold;")
         status.addWidget(self.lbl_status)
 
-                              
-        self.refresh_readers()
+        self.btn_clear_log = QPushButton(self.tr("btn.clear_log"))
+        self.btn_clear_log.clicked.connect(self.log_panel.clear_log)
+        status.addPermanentWidget(self.btn_clear_log)
 
-                                                                
-                   
-                                                                
-    def tr(self, key):
-        return self.lang.tr(key)
-
-                                                                
-                 
-                                                                
-    def build_menu(self):
-        menu = self.menuBar()
-
-              
-        file_menu = menu.addMenu(self.tr("menu.file"))
-        file_menu.addAction(self.tr("menu.import_bin")).triggered.connect(self.action_import_bin)
-        file_menu.addAction(self.tr("menu.export_bin")).triggered.connect(self.action_export_bin)
-        file_menu.addSeparator()
-        file_menu.addAction(self.tr("menu.exit")).triggered.connect(self.close)
-
-                  
-        settings_menu = menu.addMenu(self.tr("menu.settings"))
-
-               
-        theme_menu = settings_menu.addMenu(self.tr("menu.theme"))
-        theme_menu.addAction(self.tr("theme.light")).triggered.connect(lambda: self.update_theme("light"))
-        theme_menu.addAction(self.tr("theme.dark")).triggered.connect(lambda: self.update_theme("dark"))
-
-                                           
-        lang_menu = settings_menu.addMenu(self.tr("menu.language"))
-
-        for lang_code in self.settings.available_langs:
-            lang_menu.addAction(lang_code).triggered.connect(
-                lambda checked, c=lang_code: self.update_language(c)
-            )
-              
-        help_menu = menu.addMenu(self.tr("menu.help"))
-        help_menu.addAction(self.tr("menu.about")).triggered.connect(self.action_about)
-
-
-                                                                
-                   
-                                                                
-    def log(self, msg):
+    def log(self, msg: str):
         self.log_panel.log(msg)
 
-                                                                
-                       
-                                                                
     def refresh_readers(self):
         self.reader_combo.clear()
         readers = self.controller.list_readers()
@@ -181,8 +177,7 @@ class MainWindow(QMainWindow):
             self.btn_connect.setEnabled(False)
             self.btn_read.setVisible(False)
 
-            
-            self.lbl_status = QLabel(self.tr("status.reader_none"))
+            self.lbl_status.setText(self.tr("status.reader_none"))
             self.lbl_status.setStyleSheet("color: red; font-weight: bold;")
 
             self.log(self.tr("msg.no_readers"))
@@ -191,39 +186,36 @@ class MainWindow(QMainWindow):
         idx = self.reader_combo.currentIndex()
         if idx < 0:
             return
-        
 
-        reader = self.controller.list_readers()[idx]
+        readers = self.controller.list_readers()
+        if not readers or idx >= len(readers):
+            return
+
+        reader = readers[idx]
 
         try:
             atr = self.controller.connect_reader(reader)
-            self.log(f"{self.tr('msg.connected_to')} {reader} | ATR: {' '.join(f'{x:02X}' for x in atr)}")
-            
+            atr_str = " ".join(f"{x:02X}" for x in atr)
+            self.log(f"{self.tr('msg.connected_to')} {reader} | ATR: {atr_str}")
+
             self.tab_card.update_state(connected=True, card_loaded=False)
 
             self.lbl_status.setText(f"{self.tr('status.reader')}: {reader}")
-
             self.lbl_status.setStyleSheet("color: green; font-weight: bold;")
 
-                                           
             self.btn_connect.setVisible(False)
             self.btn_refresh.setVisible(False)
-
-                                       
             self.btn_disconnect.setVisible(True)
             self.btn_read.setVisible(True)
+            
 
-        except Exception as e:
-            self.log(f"{self.tr('msg.error_connect')} {e}")
+        except Exception as exc:
+            self.log(f"{self.tr('msg.error_connect')} {exc}")
 
     def disconnect_reader(self):
         self.controller.disconnect_reader()
-        self.log(self.tr("msg.reader_disconnected"))
+        self.log(self.tr("msg.reader_disconnected_ok"))
         self.tab_card.update_state(connected=False, card_loaded=False)
-
-
-
-        
 
         self.btn_connect.setVisible(True)
         self.btn_disconnect.setVisible(False)
@@ -232,10 +224,9 @@ class MainWindow(QMainWindow):
 
         self.lbl_status.setText(self.tr("status.reader_none"))
         self.lbl_status.setStyleSheet("color: red; font-weight: bold;")
+        self.update_psc_state()
+        self.lbl_psc_state.setVisible(False)
 
-                                                                
-                     
-                                                                
     def read_card(self):
         if not self.controller.conn:
             self.log(self.tr("msg.connect_reader_first"))
@@ -243,117 +234,130 @@ class MainWindow(QMainWindow):
 
         ctype = self.controller.detect_card_type()
         self.log(f"{self.tr('msg.card_type')}: {ctype}")
-        
 
         try:
             data = self.controller.load_card(ctype)
-            self.tab_chipinfo.load_chip(self.controller.card)
-            self.tab_card.load_data(data)
+            
+        except Exception as exc:
+            self.log(f"{self.tr('msg.error_card_read')} {exc}")
+            return
 
-            self.tabs.setCurrentIndex(self.tabs.indexOf(self.tab_card))
-            self.log(self.tr("msg.card_ok"))
+        try:
+            self.tab_card.load_data(data)
             self.tab_card.update_state(connected=True, card_loaded=True)
 
+            idx = self.tabs.indexOf(self.tab_card)
+            if idx != -1:
+                self.tabs.setCurrentIndex(idx)
 
-        except Exception as e:
-            self.log(f"{self.tr('msg.error_card_read')} {e}")
+            self.log(self.tr("msg.card_ok"))
+        except Exception as exc:
+            self.log(f"{self.tr('msg.error')} {self.tr('msg.hex_tab_error')}: {exc}")
 
-                                                                
-               
-                                                                
+        try:
+            self.tab_protection.load_from_card(self.controller.card)
+        except Exception as exc:
+            self.log(f"{self.tr('msg.error')} {self.tr('msg.protection_tab_error')}: {exc}")
+
+        try:
+            self.tab_chipinfo.load_chip(self.controller.card)
+            self.update_psc_state()
+            self.lbl_psc_state.setVisible(True)
+
+        except AttributeError as exc:
+            self.log(f"{self.tr('log.chip_info_unavailable')}: {exc}")
+        except Exception as exc:
+            self.log(f"{self.tr('msg.error')} {self.tr('msg.chipinfo_tab_error')}: {exc}")
+        
     def action_import_bin(self):
         path, _ = QFileDialog.getOpenFileName(
             self,
             self.tr("menu.import_bin"),
             "",
-            "Binary Files (*.bin)"
+            self.tr("msg.binary_files"),
         )
         if not path:
             return
 
         try:
-            with open(path, "rb") as f:
-                data = f.read()
+            with open(path, "rb") as fh:
+                data = fh.read()
 
             self.tab_card.load_data(list(data))
             self.log(f"{self.tr('msg.import_ok')}: {path}")
 
-        except Exception as e:
-            self.log(f"{self.tr('msg.error')} {e}")
+        except Exception as exc:
+            self.log(f"{self.tr('msg.error')} {exc}")
 
     def action_export_bin(self):
         if not self.controller.memory:
-            self.log(self.tr("msg.no_card_loaded"))
+            self.log(self.tr("msg.no_memory_export"))
             return
 
         path, _ = QFileDialog.getSaveFileName(
             self,
             self.tr("menu.export_bin"),
             "",
-            "Binary Files (*.bin)"
+            self.tr("msg.binary_files"),
         )
         if not path:
             return
 
         try:
             data = self.controller.export_memory()
-            with open(path, "wb") as f:
-                f.write(data)
+            with open(path, "wb") as fh:
+                fh.write(data)
 
             self.log(f"{self.tr('msg.export_ok')}: {path}")
 
-        except Exception as e:
-            self.log(f"{self.tr('msg.error')} {e}")
+        except Exception as exc:
+            self.log(f"{self.tr('msg.error')} {exc}")
 
-                                                                
-              
-                                                                
-    def update_theme(self, theme):
+    def update_theme(self, theme: str):
+        self.current_theme = theme
         self.setStyleSheet(THEMES.get(theme, THEMES["dark"]))
         self.settings.set("theme", theme)
+        is_dark = (theme == "dark")
+        self.log_panel.set_dark_mode(is_dark)
         self.log(f"{self.tr('msg.theme_changed')}: {theme}")
 
-    def update_language(self, lang):
+    def update_language(self, lang: str):
         self.settings.set("language", lang)
         self.lang.load(lang)
 
         QMessageBox.information(
             self,
-            "Info",
-            self.tr("msg.restart_needed")
+            self.tr("msg.information"),
+            self.tr("msg.restart_needed"),
         )
-        
-        
+
     def retranslate_ui(self):
         self.setWindowTitle("SLE Suite PRO")
 
-                 
-        self.findChildren(QLabel)[0].setText(self.tr("label.reader"))
+        self.lbl_reader.setText(self.tr("label.reader"))
         self.btn_refresh.setText(self.tr("btn.search"))
         self.btn_connect.setText(self.tr("btn.connect"))
         self.btn_disconnect.setText(self.tr("btn.disconnect"))
         self.btn_read.setText(self.tr("btn.read"))
 
-                
-        self.lbl_status.setText(self.tr("status.reader_none"))
+        if self.controller.connected_reader is None:
+            self.lbl_status.setText(self.tr("status.reader_none"))
 
-              
         idx = self.tabs.indexOf(self.tab_card)
-        self.tabs.setTabText(idx, self.tr("tab.card"))
+        if idx != -1:
+            self.tabs.setTabText(idx, self.tr("tab.card"))
 
         idx = self.tabs.indexOf(self.tab_chipinfo)
-        self.tabs.setTabText(idx, self.tr("tab.chipinfo"))
+        if idx != -1:
+            self.tabs.setTabText(idx, self.tr("tab.chipinfo"))
 
-                                          
+        idx = self.tabs.indexOf(self.tab_protection)
+        if idx != -1:
+            self.tabs.setTabText(idx, self.tr("tab.protection"))
+
         self.menuBar().clear()
-        self.build_menu()
+        self._build_menu_bar()
 
-
-      
-
-                                                                
-          
-                                                                
     def action_about(self):
         github_url = "https://github.com/wikilift" 
         
@@ -361,16 +365,51 @@ class MainWindow(QMainWindow):
             "SLE Suite PRO<br>"
             "<br>"
             "(c) 2025 Wikilift<br><br>"
-            f'Meet me on: <a href="{github_url}">Wikilift on GitHub</a>'
+            f"{self.tr('msg.meet_me_on')}: <a href=\"{github_url}\">Wikilift on GitHub</a>"
         )
         
         msg = QMessageBox(self)
-        msg.setWindowTitle("About")
+        msg.setWindowTitle(self.tr("menu.about"))
         
-                                                                   
-                                                          
         msg.setTextFormat(QtCore.Qt.TextFormat.RichText) 
         
         msg.setText(message_html)
         
         msg.exec()
+
+    def update_psc_state(self):
+        card = self.controller.card
+        if not card:
+            self.lbl_psc_state.setText(self.tr("label.psc_state_unknown"))
+            self.lbl_psc_state.setStyleSheet("color: orange; font-weight: bold; padding-left: 10px;")
+            return
+
+        if card.is_authenticated:
+            self.lbl_psc_state.setText(self.tr("label.psc_state_logged"))
+            self.lbl_psc_state.setStyleSheet("color: #00e600; font-weight: bold; padding-left: 10px;")
+        else:
+            self.lbl_psc_state.setText(self.tr("label.psc_state_required"))
+            self.lbl_psc_state.setStyleSheet("color: red; font-weight: bold; padding-left: 10px;")
+
+    
+    def ask_psc_dialog(self):
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle(self.tr("msg.psc_dialog_title"))
+        dlg.setText(self.tr("msg.psc_dialog_text"))
+        dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+
+        inp = QLineEdit()
+        dlg.layout().addWidget(inp)
+
+        ret = dlg.exec()
+        if ret != QMessageBox.Ok:
+            return None
+
+        txt = inp.text().strip().replace(" ", "")
+        if len(txt) != 4:
+            return None
+
+        try:
+            return [int(txt[0:2], 16), int(txt[2:4], 16)]
+        except:
+            return None

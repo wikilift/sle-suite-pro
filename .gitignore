@@ -3,3 +3,4 @@ obf_dist
 /obf_dist
 .gitignore
 .gitignore
+/dist

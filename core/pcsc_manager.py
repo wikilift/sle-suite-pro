@@ -1,28 +1,18 @@
-
-
 from smartcard.System import readers
 from smartcard.Exceptions import NoCardException
 from core.language_manager import tr
 
 class PCSCManager:
-  
-
+    
     def __init__(self, logger=None):
         self.reader = None
         self.conn = None
         self.log = logger if logger else (lambda x: None)
-
-                                                                 
-         
                                                                  
     def _log(self, msg):
         self.log(msg)
 
-                                                                 
-              
-                                                                 
     def list_readers(self):
-     
         try:
             r = readers()
             return r
@@ -31,7 +21,6 @@ class PCSCManager:
             return []
 
     def auto_select_reader(self):
-      
         rlist = self.list_readers()
         if not rlist:
             raise Exception(tr('msg.no_readers'))
@@ -39,20 +28,15 @@ class PCSCManager:
         for r in rlist:
             rn = str(r).upper()
             if "ACS" in rn or "ACR" in rn:
-                self._log(f"{tr('msg.acs_detected')}: {r}")
                 self.reader = r
+                self._log(f"{tr('msg.acs_detected')}: {r}")
                 return r
-
                                   
         self.reader = rlist[0]
         self._log(f"{tr('msg.acs_no_detected')} {self.reader}")
         return self.reader
 
-                                                                 
-              
-                                                                 
     def connect(self, reader=None):
-       
         if reader is None:
             reader = self.auto_select_reader()
 
@@ -73,28 +57,20 @@ class PCSCManager:
                 pass
         self.conn = None
         self._log(tr('msg.reader_disconnected'))
-
-                                                                 
          
-                                                                 
     def get_atr(self):
         if not self.conn:
             raise Exception(tr('msg.no_connected'))
         return self.conn.getATR()
-
-                                                                 
                    
-                                                                 
     def transmit(self, apdu):
-       
         if not self.conn:
-            raise Exception("No hay conexión activa con el lector.")
+            raise Exception(tr('error.no_active_connection'))
 
         try:
             data, sw1, sw2 = self.conn.transmit(apdu)
             return data, sw1, sw2
-
         except NoCardException:
-            raise Exception("No hay tarjeta insertada.")
+            raise Exception(tr('error.no_card_inserted'))
         except Exception as e:
-            raise Exception(f"Error transmitiendo APDU: {e}")
+            raise Exception(f"{tr('error.transmit_apdu')} {e}")

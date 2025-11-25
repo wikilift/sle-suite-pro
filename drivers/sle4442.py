@@ -1,7 +1,3 @@
-                    
-                                                             
-                                                                                   
-
 from .base_card import BaseCard
 from model.page16 import Page16
 from model.chipdata import ChipData
@@ -11,44 +7,23 @@ from core.language_manager import tr
 class SLE4442(BaseCard):
 
     def __init__(self, conn, logger=None):
-                                               
         super().__init__(conn=conn, logger=logger)
-
-                               
         self.size = 256
         self.page_size = 16
-
-                                    
         self.main_memory = [0xFF] * self.size
-
-                                       
         self.protection_memory = [0xFF] * 4
         self.protection_bits: dict[int, bool] = {i: False for i in range(32)}
-
-                                               
         self.security_memory = [0, 0xFF, 0xFF, 0xFF]
-
-                       
         self.pages: list[Page16] = []
-
-                             
         self.atr_header: list[ChipData] = []
         self.atr_data: list[ChipData] = []
         self.dir_data: list[ChipData] = []
 
-                                                                    
-                 
-                                                                    
     @property
     def error_counter(self) -> int:
-    
         return self.security_memory[0] if self.security_memory else 0
 
-                                                                    
-                      
-                                                                    
     def _build_pages_from_memory(self):
-  
         self.pages.clear()
         for addr in range(0, self.size, self.page_size):
             chunk = self.main_memory[addr:addr + self.page_size]
@@ -56,17 +31,10 @@ class SLE4442(BaseCard):
             self.pages.append(page)
 
     def set_display_mode(self, is_ascii: bool):
-       
         for p in self.pages:
             p.is_ascii = is_ascii
 
-                                                                    
-                
-                                                                    
     def read_all(self):
-       
-                                                                         
-                                                                   
         try:
             self._log(tr("log.select_file"))                                           
             self.conn.transmit([0xFF, 0xA4, 0x00, 0x00, 0x01, 0x06])
@@ -78,95 +46,77 @@ class SLE4442(BaseCard):
         self._build_pages_from_memory()
         return raw
 
-                                                                    
-                    
-                                                                    
     def read_page(self, addr_from: int) -> Page16:
-      
         if addr_from % self.page_size != 0:
             raise ValueError(tr("error.addr_not_mult_16"))
 
         data = self.read_range(addr_from, self.page_size)
 
-                          
         for i, b in enumerate(data):
             self.main_memory[addr_from + i] = b
 
-                            
         for p in self.pages:
             if p.addr_from == addr_from:
                 p.data = data[:]
                 p.dirty = False
                 return p
 
-                                         
         page = Page16(addr_from, data)
         self.pages.append(page)
         return page
 
     def read_bytes(self, addr: int, length: int) -> list[int]:
-       
         data = self.read_range(addr, length)
         for i, b in enumerate(data):
             if addr + i < len(self.main_memory):
                 self.main_memory[addr + i] = b
         return data
 
-                                                                    
-                        
-                                                                    
     def read_protection_memory(self) -> list[int]:
-       
         pm = super().read_protection_memory()
         self._decode_protection_bits(pm)
         return pm
 
     def _decode_protection_bits(self, pm: list[int]):
-      
-        self.protection_bits = {}
-        idx = 0
+        bits = []
         for byte in pm:
             mask = 1
             for _ in range(8):
                 free = (byte & mask) != 0
-                                                
-                self.protection_bits[idx] = not free
+                bits.append(not free)
                 mask <<= 1
-                idx += 1
-
-        self._log(tr("log.pm_decoded"))              
+        self.protection_bits = bits
+        self._log(tr("log.pm_decoded"))
+        
+    @property
+    def protection_bits_list(self):
+        if isinstance(self.protection_bits, dict):
+            out = []
+            last = max(self.protection_bits.keys())
+            for i in range(last + 1):
+                out.append(bool(self.protection_bits.get(i, False)))
+            return out
+        return list(self.protection_bits)
 
     def protect_byte(self, addr: int):
-       
         super().protect_byte(addr)
         if addr in self.protection_bits:
             self.protection_bits[addr] = True
 
-                                                                    
-                      
-                                                                    
     def read_security_memory(self) -> list[int]:
-
         sm = super().read_security_memory()
         self.security_memory = sm[:]
         return sm
-
                                         
     def change_psc(self, new_psc: list[int]):
         super().change_psc(new_psc)
                                                                    
-
-                                                                    
-             
-                                                                    
     def write_byte(self, addr: int, value: int):
-  
         if not (0 <= value <= 0xFF):
             raise ValueError(tr("error.value_not_byte"))
 
         self.write_bytes(addr, [value])
 
-                                 
         if addr < len(self.main_memory):
             self.main_memory[addr] = value
 
@@ -177,17 +127,15 @@ class SLE4442(BaseCard):
             self.pages[page_idx].dirty = False
 
     def write_page(self, page: Page16):
-     
         addr = page.addr_from
         if addr % self.page_size != 0:
             raise ValueError(tr("error.addr_not_mult_16"))
         if len(page.data) != self.page_size:
             raise ValueError(tr("error.page_not_16bytes"))
 
-        self._log(f"{tr('msg.page_write')} en {addr}…")
+        self._log(f"{tr('msg.page_write')} {tr('msg.in')} {addr}…")
         self.write_bytes(addr, page.data)
 
-                           
         for i, b in enumerate(page.data):
             if addr + i < len(self.main_memory):
                 self.main_memory[addr + i] = b
@@ -195,11 +143,7 @@ class SLE4442(BaseCard):
         page.dirty = False
         self._log(f"{tr('msg.page_write')} {addr} {tr('msg.write_ok')}")
 
-                                                                    
-                                                     
-                                                                    
     def generate_chip_data(self):
-     
         if not self.main_memory or len(self.main_memory) < 30:
             raise Exception(tr("error.memory_empty_read"))
 
@@ -207,122 +151,97 @@ class SLE4442(BaseCard):
         self.atr_data.clear()
         self.dir_data.clear()
 
-        H1 = self.main_memory[0]
-        H2 = self.main_memory[1]
-        H3 = self.main_memory[2]
-        H4 = self.main_memory[3]
+        b0 = self.main_memory[0]
+        b1 = self.main_memory[1]
+        b2 = self.main_memory[2]
+        b3 = self.main_memory[3]
 
-                                        
-                    
-                                        
-        proto_type = (H1 >> 4) & 0x0F
-        proto_desc = self._protocol_desc(proto_type)
+        proto_hi = (b0 >> 4) & 0x0F
+        proto_lo = b0 & 0x0F
+        length_hi = (b2 >> 4) & 0x0F
+        length_lo = b2 & 0x0F
+
         self.atr_header.append(
-            ChipData("B0-H1", "Protocol Type", f"{proto_type}", proto_desc)
+            ChipData("B0-H1", tr("label.protocol_type"), f"{proto_hi:X}", tr("desc.protocol_2wire") if proto_hi == 0xA else tr("desc.unknown"))
+        )
+        self.atr_header.append(
+            ChipData("B0-H2", tr("label.structure"), f"{proto_lo:X}", tr("desc.structure_general") if proto_lo == 0x2 else tr("desc.unknown"))
         )
 
-        structure = H1 & 0x07
+        read_mode = (b1 >> 4) & 0x0F
+        num_units = b1 & 0x0F
+
         self.atr_header.append(
-            ChipData("B0-H1", "Structure", f"{structure:02X}", self._structure_desc(structure))
+            ChipData("B1-H1", tr("label.read_mode"), f"{read_mode:X}", tr("desc.read_to_end") if read_mode == 0 else tr("desc.unknown"))
+        )
+        self.atr_header.append(
+            ChipData("B1-H2", tr("label.num_data_units"), f"{num_units:X}", tr("desc.256") if num_units == 2 else tr("desc.unknown"))
+        )
+        self.atr_header.append(
+            ChipData("B1-H2", tr("label.len_data_unit"), f"{length_lo:X}", tr("desc.8_bits") if length_lo == 3 else tr("desc.unknown"))
         )
 
-                       
-        read_mode = (H2 >> 7) & 0x01
         self.atr_header.append(
-            ChipData(
-                "B1-H2",
-                "Read Mode",
-                f"{read_mode}",
-                tr("desc.read_to_end") if read_mode == 0 else tr("desc.read_with_len"),
-            )
+            ChipData("B2-H1", tr("label.category"), f"{length_hi:X}", "")
+        )
+        self.atr_header.append(
+            ChipData("B3-H4", tr("label.dir_data_ref"), f"{b3:02X}", "")
         )
 
-                                  
-        data_units = (H2 >> 3) & 0x0F
-        units_desc = self._data_units_desc(data_units)
-        self.atr_header.append(
-            ChipData("B1-H2", "Number of data units", f"{data_units:02X}", units_desc)
-        )
-
-                                 
-        unit_len = H2 & 0x07
-        self.atr_header.append(
-            ChipData("B1-H2", "Length of data unit", f"{unit_len:02X}", f"{2**unit_len} {tr('desc.bits')}")
-        )
-
-                      
-        self.atr_header.append(
-            ChipData("B2-H3", "Category", f"{H3:02X}", "")
-        )
-
-                                
-        dir_ref = H4 & 0x7F
-        self.atr_header.append(
-            ChipData("B3-H4", "DIR Data Ref", f"{dir_ref}", "")
-        )
-
-                                        
-                  
-                                        
         self.atr_data.append(
-            ChipData("B4-TM", "Manuf Tag", f"{self.main_memory[4]:02X}", "")
+            ChipData("B4-TM", tr("label.manuf_tag"), f"{self.main_memory[4]:02X}", "")
         )
         self.atr_data.append(
-            ChipData("B5-LM", "Length of Manuf data", f"{self.main_memory[5]:02X}", "")
+            ChipData("B5-LM", tr("label.len_manuf_data"), f"{self.main_memory[5]:02X}", "")
         )
         self.atr_data.append(
-            ChipData("B6-ICM", "IC Manuf ID", f"{self.main_memory[6]:02X}", "")
+            ChipData("B6-ICM", tr("label.ic_manuf_id"), f"{self.main_memory[6]:02X}", "")
         )
         self.atr_data.append(
-            ChipData("B7-ICT", "IC Type", f"{self.main_memory[7]:02X}", "")
+            ChipData("B7-ICT", tr("label.ic_type"), f"{self.main_memory[7]:02X}", "")
         )
 
-        fab = self._hex(self.main_memory[8:13])
+        fab = "-".join(f"{x:02X}" for x in self.main_memory[8:13])
         self.atr_data.append(
-            ChipData("B8/B12-ICCF", "IC Fabr ID", fab, "")
+            ChipData("B8-B12", tr("label.ic_fabr_id"), fab, "")
         )
 
-        sn = self._hex(self.main_memory[13:17])
+        sn = "-".join(f"{x:02X}" for x in self.main_memory[13:17])
         self.atr_data.append(
-            ChipData("B13/B16-ICCSN", "IC Serial No", sn, "")
-        )
-
-                                        
-                  
-                                        
-        self.dir_data.append(
-            ChipData("B17-TT", "App Data Tag", f"{self.main_memory[17]:02X}", "")
-        )
-        self.dir_data.append(
-            ChipData("B18-LT", "Len of app Template", f"{self.main_memory[18]}", "")
-        )
-        self.dir_data.append(
-            ChipData("B19-TA", "Tag of AID", f"{self.main_memory[19]:02X}", "")
-        )
-        self.dir_data.append(
-            ChipData("B20-LA", "Len of AID", f"{self.main_memory[20]}", "")
-        )
-
-        aid = self._hex(self.main_memory[21:27])
-        self.dir_data.append(
-            ChipData("B21/B26-AID", "AID", aid, "")
+            ChipData("B13-B16", tr("label.ic_serial_no"), sn, "")
         )
 
         self.dir_data.append(
-            ChipData("B27-TD", "Discretionary Tag", f"{self.main_memory[27]:02X}", "")
+            ChipData("B17-TT", tr("label.app_data_tag"), f"{self.main_memory[17]:02X}", "")
         )
         self.dir_data.append(
-            ChipData("B28-LD", "Discretionary Len", f"{self.main_memory[28]}", "")
+            ChipData("B18-LT", tr("label.len_app_template"), f"{self.main_memory[18]}", "")
         )
         self.dir_data.append(
-            ChipData("B29-AP", "App Per Id", f"{self.main_memory[29]:02X}", "")
+            ChipData("B19-TA", tr("label.tag_of_aid"), f"{self.main_memory[19]:02X}", "")
+        )
+        self.dir_data.append(
+            ChipData("B20-LA", tr("label.len_of_aid"), f"{self.main_memory[20]}", "")
+        )
+
+        aid_len = 6
+        aid = "-".join(f"{x:02X}" for x in self.main_memory[21:21+aid_len])
+        self.dir_data.append(
+            ChipData("B21-B26", tr("label.aid"), aid, "")
+        )
+
+        self.dir_data.append(
+            ChipData("B27-TD", tr("label.discretionary_tag"), f"{self.main_memory[27]:02X}", "")
+        )
+        self.dir_data.append(
+            ChipData("B28-LD", tr("label.discretionary_len"), f"{self.main_memory[28]}", "")
+        )
+        self.dir_data.append(
+            ChipData("B29-AP", tr("label.app_per_id"), f"{self.main_memory[29]:02X}", "")
         )
 
         self._log(tr("log.chipdata_ok"))
-
-                                                                    
                                       
-                                                                    
     def _protocol_desc(self, p: int) -> str:
         if 0 <= p <= 7:
             return tr("desc.reserved_iso")
@@ -348,12 +267,12 @@ class SLE4442(BaseCard):
     def _data_units_desc(self, n: int) -> str:
         table = {
             0: tr("desc.no_indication"),
-            1: "128",
-            2: "256",
-            3: "512",
-            4: "1024",
-            5: "2048",
-            6: "4096",
+            1: tr("desc.128"),
+            2: tr("desc.256"),
+            3: tr("desc.512"),
+            4: tr("desc.1024"),
+            5: tr("desc.2048"),
+            6: tr("desc.4096"),
             15: tr("desc.rfu"),
         }
         return table.get(n, tr("desc.greater_4096"))

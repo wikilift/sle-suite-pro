@@ -1,38 +1,74 @@
-                     
-
 STYLE_LIGHT = """
 QWidget {
-    background-color: #f5f5f5;
-    color: #000000;
-    font-size: 14px;
+    background-color: #eeeeee;
+    color: #202020;
+    font-size: 15px;
 }
 
-/* Buttons */
+
 QPushButton {
-    background-color: #ffffff;
-    border: 1px solid #cccccc;
-    padding: 5px;
+    background-color: #fdfdfd;
+    border: 1px solid #b8b8b8;
+    padding: 7px;
     border-radius: 4px;
 }
 QPushButton:hover {
-    background-color: #e6e6e6;
+    background-color: #e2e2e2;
 }
 
-/* ComboBox */
+
 QComboBox {
-    background-color: #ffffff;
-    padding: 4px;
+    background-color: #fdfdfd;
+    color: #202020;
+    border: 1px solid #b8b8b8;
+    padding: 5px;
+    font-size: 15px;
 }
 
-/* Tabs */
+
 QTabWidget::pane {
-    border: 1px solid #cccccc;
+    border: 1px solid #b8b8b8;
 }
 QTabBar::tab {
-    background: #eaeaea;
-    padding: 5px;
+    background: #d6d6d6;
+    padding: 7px;
+    color: #202020;
+    font-size: 15px;
 }
 QTabBar::tab:selected {
     background: #ffffff;
+    font-weight: bold;
+}
+
+#logPanel {
+    background-color: #1f1f1f;
+    color: #e6e6e6;
+    font-size: 15px;
+    border: 1px solid #444;
+}
+
+#protectionPanel {
+    background-color: transparent;
+    border: none;
+}
+
+#protectionGrid {
+    background-color: #2a2a2a;
+    color: #d0d0d0;
+    border: 1px solid #555;
+}
+
+#protectionGrid QLabel {
+    background-color: #2a2a2a;
+    color: #b8b8b8;
+    border: 1px solid #444;
+}
+
+
+#protectionGrid QCheckBox {
+    background-color: #2a2a2a;
+    color: #c0c0c0;
+    border: 1px solid #444;
+    padding-left: 4px;
 }
 """
