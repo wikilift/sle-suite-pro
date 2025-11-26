@@ -31,6 +31,8 @@ SLE Suite PRO is an advanced tool for reading, analyzing, editing, and authentic
 
 ## **TODO**
 
+- **Improve auth detection, sometimes say "auth ok" but still not authenticated**
+
 - **Acquire SLE5542 and SLE5528 cards**  
   Required for real-world testing of protection bits and write operations on these models.
 
