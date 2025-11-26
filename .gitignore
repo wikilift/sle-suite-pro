@@ -5,3 +5,7 @@ obf_dist
 .gitignore
 /dist
 sle_suite_pro.spec
+/build
+/output
+
+
