@@ -1,12 +1,11 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QComboBox, QPushButton, QLabel, QTabWidget, QStatusBar,
-    QFileDialog, QMessageBox, QSplitter
+    QFileDialog, QMessageBox, QSplitter, QLineEdit
 )
-
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
+from gui.dialogs.about_dialog import AboutDialog
 from PySide6 import QtCore
-from PySide6.QtWidgets import QLineEdit
 
 from gui.widgets.log_panel import LogPanel
 from gui.tabs.tab_card import TabCard
@@ -18,15 +17,23 @@ from gui.themes import THEMES
 from core.pcsc_manager import PCSCManager
 from controllers.app_controller import AppController
 from core.settings_manager import SettingsManager
-from core.language_manager import LanguageManager
+from core.language_manager import LanguageManager, init_language
+from core.card_worker import CardWorker
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QIcon
+from core.resource import resource_path
 
 
 class MainWindow(QMainWindow):
+    requestReadCard = Signal()
+
     def __init__(self):
         super().__init__()
 
         self.settings = SettingsManager()
-        self.lang = LanguageManager(self.settings.get("language", "es"))
+        lang_code = self.settings.get("language", "es")
+        self.lang = LanguageManager(lang_code)
+        init_language(lang_code)
         self.pcsc = PCSCManager()
 
         self.controller = AppController(
@@ -47,7 +54,65 @@ class MainWindow(QMainWindow):
         self._build_central_widgets()
         self._build_status_bar()
 
+        self.thread = QThread(self)
+        self.worker = CardWorker(self.controller)
+        self.worker.moveToThread(self.thread)
+        self.thread.start()
+
+        self.worker.log.connect(self.log)
+        self.worker.error.connect(self.on_worker_error)
+        self.worker.finished.connect(self.on_worker_finished)
+
+        self.requestReadCard.connect(self.worker.read_card)
+
+        self.controller.log = lambda msg: self.worker.log.emit(msg)
+        icon_path = resource_path("assets/logo.ico")
+        self.setWindowIcon(QIcon(icon_path))
         self.refresh_readers()
+        QTimer.singleShot(200, lambda: AboutDialog(self, self.tr).exec())
+
+    def closeEvent(self, event):
+        try:
+            self.thread.quit()
+            self.thread.wait()
+        except Exception:
+            pass
+        super().closeEvent(event)
+
+    def on_worker_error(self, msg):
+        self.log(f"ERROR: {msg}")
+        self.lbl_status.setText(self.tr("msg.error"))
+        self.btn_read.setEnabled(True)
+
+    def on_worker_finished(self, result):
+        self.btn_read.setEnabled(True)
+
+        if isinstance(result, list):
+            try:
+                self.tab_card.load_data(result)
+                self.tab_card.update_state(connected=True, card_loaded=True)
+                idx = self.tabs.indexOf(self.tab_card)
+                if idx != -1:
+                    self.tabs.setCurrentIndex(idx)
+                self.log(self.tr("msg.card_ok"))
+            except Exception as exc:
+                self.log(f"{self.tr('msg.error')} {exc}")
+
+            try:
+                self.tab_protection.load_from_card(self.controller.card)
+            except Exception as exc:
+                self.log(f"{self.tr('msg.protection_tab_error')}: {exc}")
+
+            try:
+                self.tab_chipinfo.load_chip(self.controller.card)
+                self.update_psc_state()
+                self.lbl_psc_state.setVisible(True)
+            except Exception as exc:
+                self.log(f"{self.tr('msg.chipinfo_tab_error')}: {exc}")
+
+        elif result is True:
+            self.update_psc_state()
+            self.log(self.tr("msg.operation_done"))
 
     def tr(self, key: str) -> str:
         return self.lang.tr(key)
@@ -146,7 +211,6 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(splitter)
         self.update_psc_state()
 
-
     def _build_status_bar(self):
         status = QStatusBar()
         self.setStatusBar(status)
@@ -158,6 +222,15 @@ class MainWindow(QMainWindow):
         self.btn_clear_log = QPushButton(self.tr("btn.clear_log"))
         self.btn_clear_log.clicked.connect(self.log_panel.clear_log)
         status.addPermanentWidget(self.btn_clear_log)
+
+    def read_card(self):
+        if not self.controller.conn:
+            self.log(self.tr("msg.connect_reader_first"))
+            return
+
+        self.log(self.tr("msg.reading_card"))
+        self.btn_read.setEnabled(False)
+        self.requestReadCard.emit()
 
     def log(self, msg: str):
         self.log_panel.log(msg)
@@ -172,14 +245,11 @@ class MainWindow(QMainWindow):
 
             self.btn_connect.setEnabled(True)
             self.log(self.tr("msg.readers_found"))
-
         else:
             self.btn_connect.setEnabled(False)
             self.btn_read.setVisible(False)
-
             self.lbl_status.setText(self.tr("status.reader_none"))
             self.lbl_status.setStyleSheet("color: red; font-weight: bold;")
-
             self.log(self.tr("msg.no_readers"))
 
     def connect_reader(self):
@@ -207,7 +277,6 @@ class MainWindow(QMainWindow):
             self.btn_refresh.setVisible(False)
             self.btn_disconnect.setVisible(True)
             self.btn_read.setVisible(True)
-            
 
         except Exception as exc:
             self.log(f"{self.tr('msg.error_connect')} {exc}")
@@ -227,48 +296,6 @@ class MainWindow(QMainWindow):
         self.update_psc_state()
         self.lbl_psc_state.setVisible(False)
 
-    def read_card(self):
-        if not self.controller.conn:
-            self.log(self.tr("msg.connect_reader_first"))
-            return
-
-        ctype = self.controller.detect_card_type()
-        self.log(f"{self.tr('msg.card_type')}: {ctype}")
-
-        try:
-            data = self.controller.load_card(ctype)
-            
-        except Exception as exc:
-            self.log(f"{self.tr('msg.error_card_read')} {exc}")
-            return
-
-        try:
-            self.tab_card.load_data(data)
-            self.tab_card.update_state(connected=True, card_loaded=True)
-
-            idx = self.tabs.indexOf(self.tab_card)
-            if idx != -1:
-                self.tabs.setCurrentIndex(idx)
-
-            self.log(self.tr("msg.card_ok"))
-        except Exception as exc:
-            self.log(f"{self.tr('msg.error')} {self.tr('msg.hex_tab_error')}: {exc}")
-
-        try:
-            self.tab_protection.load_from_card(self.controller.card)
-        except Exception as exc:
-            self.log(f"{self.tr('msg.error')} {self.tr('msg.protection_tab_error')}: {exc}")
-
-        try:
-            self.tab_chipinfo.load_chip(self.controller.card)
-            self.update_psc_state()
-            self.lbl_psc_state.setVisible(True)
-
-        except AttributeError as exc:
-            self.log(f"{self.tr('log.chip_info_unavailable')}: {exc}")
-        except Exception as exc:
-            self.log(f"{self.tr('msg.error')} {self.tr('msg.chipinfo_tab_error')}: {exc}")
-        
     def action_import_bin(self):
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -285,7 +312,6 @@ class MainWindow(QMainWindow):
 
             self.tab_card.load_data(list(data))
             self.log(f"{self.tr('msg.import_ok')}: {path}")
-
         except Exception as exc:
             self.log(f"{self.tr('msg.error')} {exc}")
 
@@ -307,9 +333,7 @@ class MainWindow(QMainWindow):
             data = self.controller.export_memory()
             with open(path, "wb") as fh:
                 fh.write(data)
-
             self.log(f"{self.tr('msg.export_ok')}: {path}")
-
         except Exception as exc:
             self.log(f"{self.tr('msg.error')} {exc}")
 
@@ -324,12 +348,14 @@ class MainWindow(QMainWindow):
     def update_language(self, lang: str):
         self.settings.set("language", lang)
         self.lang.load(lang)
+        init_language(lang)
 
         QMessageBox.information(
             self,
             self.tr("msg.information"),
             self.tr("msg.restart_needed"),
         )
+
 
     def retranslate_ui(self):
         self.setWindowTitle("SLE Suite PRO")
@@ -359,23 +385,9 @@ class MainWindow(QMainWindow):
         self._build_menu_bar()
 
     def action_about(self):
-        github_url = "https://github.com/wikilift" 
-        
-        message_html = (
-            "SLE Suite PRO<br>"
-            "<br>"
-            "(c) 2025 Wikilift<br><br>"
-            f"{self.tr('msg.meet_me_on')}: <a href=\"{github_url}\">Wikilift on GitHub</a>"
-        )
-        
-        msg = QMessageBox(self)
-        msg.setWindowTitle(self.tr("menu.about"))
-        
-        msg.setTextFormat(QtCore.Qt.TextFormat.RichText) 
-        
-        msg.setText(message_html)
-        
-        msg.exec()
+        dlg = AboutDialog(self, self.tr)
+        dlg.exec()
+
 
     def update_psc_state(self):
         card = self.controller.card
@@ -391,7 +403,6 @@ class MainWindow(QMainWindow):
             self.lbl_psc_state.setText(self.tr("label.psc_state_required"))
             self.lbl_psc_state.setStyleSheet("color: red; font-weight: bold; padding-left: 10px;")
 
-    
     def ask_psc_dialog(self):
         dlg = QMessageBox(self)
         dlg.setWindowTitle(self.tr("msg.psc_dialog_title"))
@@ -411,5 +422,5 @@ class MainWindow(QMainWindow):
 
         try:
             return [int(txt[0:2], 16), int(txt[2:4], 16)]
-        except:
+        except Exception:
             return None

@@ -77,31 +77,53 @@ class SLE4442(BaseCard):
         self._decode_protection_bits(pm)
         return pm
 
+    
     def _decode_protection_bits(self, pm: list[int]):
-        bits = []
+        
+        bits_dict: dict[int, bool] = {}
+        idx = 0
         for byte in pm:
             mask = 1
             for _ in range(8):
-                free = (byte & mask) != 0
-                bits.append(not free)
+                free = (byte & mask) != 0   
+                bits_dict[idx] = not free   
                 mask <<= 1
-        self.protection_bits = bits
+                idx += 1
+
+        self.protection_bits = bits_dict
         self._log(tr("log.pm_decoded"))
         
+    
     @property
     def protection_bits_list(self):
         if isinstance(self.protection_bits, dict):
             out = []
-            last = max(self.protection_bits.keys())
+            last = max(self.protection_bits.keys(), default=-1)
             for i in range(last + 1):
                 out.append(bool(self.protection_bits.get(i, False)))
             return out
         return list(self.protection_bits)
 
     def protect_byte(self, addr: int):
-        super().protect_byte(addr)
-        if addr in self.protection_bits:
+        if not self.is_authenticated:
+            raise Exception(tr("msg.psc_required"))
+
+        if not (0 <= addr < 32):
+            raise ValueError(tr("error.invalid_address"))
+
+        apdu = [0xFF, 0xD1, 0x00, addr & 0xFF, 0x01, 0xFF]
+        self.tx(apdu, f"{tr('log.protect_byte')}[{addr}]")
+
+        byte_index = addr // 8
+        bit_index = addr % 8
+        if 0 <= byte_index < len(self.protection_memory):
+            old_val = self.protection_memory[byte_index]
+            new_val = old_val & ~(1 << bit_index)
+            self.protection_memory[byte_index] = new_val
+
+        if isinstance(self.protection_bits, dict):
             self.protection_bits[addr] = True
+
 
     def read_security_memory(self) -> list[int]:
         sm = super().read_security_memory()
@@ -276,3 +298,24 @@ class SLE4442(BaseCard):
             15: tr("desc.rfu"),
         }
         return table.get(n, tr("desc.greater_4096"))
+    
+    
+    def set_protection_bits(self, indices: list[int]):
+        if not self.is_authenticated:
+            raise Exception(tr("msg.psc_required"))
+
+        if not indices:
+            return
+
+        for addr in sorted(set(indices)):
+            if 0 <= addr < 32:
+                if isinstance(self.protection_bits, dict):
+                    if self.protection_bits.get(addr, False):
+                        continue
+                self.protect_byte(addr)
+
+        try:
+            pm = super().read_protection_memory()
+            self._decode_protection_bits(pm)
+        except Exception:
+            pass

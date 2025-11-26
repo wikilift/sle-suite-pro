@@ -1,6 +1,6 @@
-                          
 import json
 import os
+from core.resource import resource_path
 
 _language_manager = None
 
@@ -16,24 +16,27 @@ class LanguageManager:
         self.load(lang)
 
     def _scan_languages(self):
-        base = os.path.dirname(os.path.abspath(__file__))
-        folder = os.path.join(base, "..", "i18n")
+        folder = resource_path("i18n")
 
         langs = []
-        for f in os.listdir(folder):
-            if f.endswith(".json"):
-                langs.append(f[:-5])                 
+        try:
+            for f in os.listdir(folder):
+                if f.endswith(".json"):
+                    langs.append(f[:-5])
+        except FileNotFoundError:
+            pass
+
         return sorted(langs)
 
     def _load_fallback(self):
-        base = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(base, "..", "i18n", "es.json")
+        path = resource_path("i18n/es.json")
+
         with open(path, "r", encoding="utf-8") as f:
             self.fallback = json.load(f)
 
     def load(self, lang):
-        base = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(base, "..", "i18n", f"{lang}.json")
+
+        path = resource_path(f"i18n/{lang}.json")
 
         if not os.path.exists(path):
             raise FileNotFoundError(f"Missing language file: {path}")

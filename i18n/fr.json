@@ -265,5 +265,7 @@
     "theme.dark": "Sombre",
     "theme.light": "Clair",
     "view.ascii": "ASCII",
+    "msg.psc_invalid_format": "Le format du code PIN est invalide",
+    "msg.warning": "Avertissement !",
     "view.hex": "HEX"
 }

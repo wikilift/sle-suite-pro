@@ -276,5 +276,9 @@
     "msg.meet_me_on": "Encuéntrame en",
     "log.chip_info_unavailable": "Información del chip no disponible para este tipo de tarjeta",
     "msg.psc_dialog_text": "Introduce el PSC (2 bytes hex):",
-    "msg.no_memory_export": "No hay memoria cargada para exportar."
+    "msg.no_memory_export": "No hay memoria cargada para exportar.",
+    "msg.psc_invalid_format":"El formato del pin no es válido",
+    "msg.warning":"¡Advertencia!",
+    "msg.support_text": "Si esta herramienta te ayuda, una estrellita o un café me motiva a seguir mejorándola.",
+    "msg.buy_me_coffee": "Buy me a coffee"
 }

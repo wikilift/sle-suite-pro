@@ -274,7 +274,7 @@
     "btn.clear_log": "Limpar registo",
     "msg.binary_files": "Ficheiros Binários (*.bin)",
     "msg.meet_me_on": "Encontre-me em",
-    "log.chip_info_unavailable": "Informação do chip não disponível para este tipo de cartão",
-    "msg.psc_dialog_text": "Introduza o PSC (2 bytes hex):",
-    "msg.no_memory_export": "Não há memória carregada para exportar."
+   
+    "msg.psc_invalid_format": "O formato do PIN é inválido",
+    "msg.warning": "Aviso!"
 }

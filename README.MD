@@ -5,7 +5,52 @@ SLE Suite PRO is an advanced tool for reading, analyzing, editing, and authentic
 
 ---
 
+## **Version 0.0.3**
+
+### New Features & Improvements
+
+- **Full support for reading and writing protection bits**  
+  - Correct decoding of the Protection Memory.  
+  - Safe, irreversible bit-write operations with confirmation.  
+  - Automatic refresh of the protection table after each change.
+
+- **Complete fix of the translation system (i18n)**  
+  - All UI elements and internal logs now follow the selected language.  
+  - Unified translation pipeline (UI + backend).  
+  - Removed leftover Spanish text.
+
+- **Reader moved to a dedicated background thread**  
+  - The UI no longer freezes during read/write operations.  
+  - Long tasks (memory reading, PSC operations) are now fully asynchronous.  
+  - Improved stability when connecting/disconnecting PC/SC readers.
+
+- **General UX and stability improvements**  
+  - Faster log panel rendering with refined color scheme.  
+  - Better PC/SC reader detection.  
+  - Internal code optimizations for page refresh and data tables.
+
+## **TODO**
+
+- **Acquire SLE5542 and SLE5528 cards**  
+  Required for real-world testing of protection bits and write operations on these models.
+
+- **Implement driver support for additional PC/SC readers**  
+  Extend compatibility beyond ACS ACR39U and improve cross-platform detection.
+
+- **Interactive HEX editor highlighting**  
+  Allow users to colorize specific bytes, ranges, or patterns directly inside the memory viewer.
+
+- **Customizable UI color themes**  
+  Add a configuration panel to pick accents, background colors, or full theme presets.
+
+- **Amazing future features**  
+  Research and prototype advanced tools to take SLE Suite PRO further.
+
+
+
 ## Main Features
+
+
 
 ### ✔ Full SLE Card Reading
 - Full support for:

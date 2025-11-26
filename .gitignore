@@ -4,3 +4,4 @@ obf_dist
 .gitignore
 .gitignore
 /dist
+sle_suite_pro.spec

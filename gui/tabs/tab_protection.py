@@ -106,7 +106,7 @@ class TabProtection(QWidget):
             self.btn_apply.setEnabled(False)
             return
 
-        if ctype in ("SLE4428", "SLE5528"):
+        if ctype in ("SLE4442", "SLE5542"):
             self.btn_apply.setEnabled(True)
         else:
             self.btn_apply.setEnabled(False)
@@ -115,12 +115,14 @@ class TabProtection(QWidget):
 
         cols = 16
 
+       
         for c in range(cols):
             lbl = QLabel(f"{c:02X}")
             lbl.setAlignment(Qt.AlignCenter)
             lbl.setStyleSheet("font-weight:bold; padding:2px;")
             self.grid.addWidget(lbl, 0, c + 1)
 
+   
         for i, prot in enumerate(bits):
             row = i // cols
             col = i % cols
@@ -135,7 +137,9 @@ class TabProtection(QWidget):
             cb = QCheckBox(f"{i:02X}")
             cb.setToolTip(f"{tr('label.bit')} {i:04X}")
             cb.setChecked(prot)
+
             cb.setEnabled((not prot) and self.btn_apply.isEnabled())
+
             cb.setProperty("prot_index", i)
             cb.setMinimumWidth(46)
             cb.setMinimumHeight(24)
@@ -170,22 +174,22 @@ class TabProtection(QWidget):
     def apply_changes(self):
         if not self.card or not hasattr(self.card, "set_protection_bits"):
             return
-        
+
         if hasattr(self.card, "ensure_authenticated"):
             ok = self.card.ensure_authenticated(self.main)
             if not ok:
                 QMessageBox.critical(self, tr("msg.error"), tr("msg.psc_required"))
                 return
         else:
-           
             try:
                 sm = self.card.read_security_memory()
-                if sm[0] != 0x7F:
+                if sm[0] == 0:
                     QMessageBox.critical(self, tr("msg.error"), tr("msg.psc_required"))
                     return
             except Exception as e:
                 QMessageBox.critical(self, tr("msg.error"), str(e))
                 return
+
         targets = []
         for i, cb in enumerate(self.checks):
             curr = cb.isChecked()

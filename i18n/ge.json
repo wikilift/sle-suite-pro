@@ -265,5 +265,7 @@
     "theme.dark": "Dunkel",
     "theme.light": "Hell",
     "view.ascii": "ASCII",
-    "view.hex": "HEX"
+    "view.hex": "HEX",
+    "msg.psc_invalid_format": "Das PIN-Format ist ungültig",
+    "msg.warning": "Warnung!"
 }

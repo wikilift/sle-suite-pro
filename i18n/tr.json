@@ -276,5 +276,7 @@
     "msg.meet_me_on": "Beni Bulun",
     "log.chip_info_unavailable": "Bu kart türü için çip bilgisi mevcut değil",
     "msg.psc_dialog_text": "Lütfen PSC'yi (2 bayt hex) girin:",
-    "msg.no_memory_export": "Dışa aktarılacak yüklü bellek yok."
+    "msg.no_memory_export": "Dışa aktarılacak yüklü bellek yok.",
+    "msg.psc_invalid_format": "PIN biçimi geçersiz",
+    "msg.warning": "Uyarı!"
 }
