@@ -103,7 +103,7 @@ class AppController:
         from drivers.sle4442 import SLE4442 as _S4442
 
         if isinstance(self.card, (_S4428, _S5528)):
-            self.log(tr("msg.psc_recovery_not_supported"))
+            
             psc = self.main.ask_psc_dialog()
             if not psc:
                 return None

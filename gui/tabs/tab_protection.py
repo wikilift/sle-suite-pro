@@ -106,10 +106,8 @@ class TabProtection(QWidget):
             self.btn_apply.setEnabled(False)
             return
 
-        if ctype in ("SLE4442", "SLE5542"):
-            self.btn_apply.setEnabled(True)
-        else:
-            self.btn_apply.setEnabled(False)
+        
+        self.btn_apply.setEnabled(True)
 
         self.lbl_info.setText(f"{tr('label.protection_bits')}: {total}")
 
